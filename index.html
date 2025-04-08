@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartList Pro</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <button class="mobile-menu-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+    
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3><i class="fas fa-folder-open"></i> Kategorije</h3>
+        </div>
+        <div class="sidebar-content">
+            <div id="categoryTree" class="category-tree"></div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <header class="header">
+            <h1>SmartList Pro</h1>
+        </header>
+
+        <div class="creator-card" id="creatorCard">
+            <div class="form-group">
+                <label>Ime seznama:</label>
+                <input type="text" id="listName" placeholder="✏️ Vnesi ime" required>
+            </div>
+            <div class="creator-controls">
+                <div class="form-group">
+                    <label>Kategorija:</label>
+                    <select id="listCategory"></select>
+                </div>
+                <div class="form-group">
+                    <label>Prioriteta:</label>
+                    <select id="listPriority">
+                        <option value="1">★</option>
+                        <option value="2">★★</option>
+                        <option value="3">★★★</option>
+                    </select>
+                </div>
+                <button class="primary-btn" onclick="createList()">Ustvari</button>
+                <button class="primary-btn danger" onclick="clearForm()">Prekliči</button>
+            </div>
+        </div>
+
+        <div id="listContainer" class="grid-container" style="display: none;">
+            <div class="list-controls">
+                <label>Sortiraj sezname:</label>
+                <select id="sortBy" onchange="sortLists()">
+                    <option value="name_asc">A-Ž</option>
+                    <option value="name_desc">Ž-A</option>
+                    <option value="priority_asc">Prioriteta ▲</option>
+                    <option value="priority_desc">Prioriteta ▼</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div id="listModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="form-group">
+                    <label>Ime seznama:</label>
+                    <input type="text" id="editListName" style="font-weight: bold">
+                    <input type="color" id="titleColor" class="color-picker">
+                </div>
+                <div class="modal-controls">
+                    <button class="primary-btn fullscreen-btn" onclick="toggleFullscreen()">
+                        <i class="fas fa-expand"></i> <span class="btn-text">Celozaslonsko</span>
+                    </button>
+                    <button class="primary-btn export" onclick="exportPDF()">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                    <button class="primary-btn share" onclick="shareList()">
+                        <i class="fas fa-share-alt"></i> Deli
+                    </button>
+                </div>
+            </div>
+            
+            <div class="edit-mode">
+                <div class="item-controls">
+                    <label>Sortiraj elemente:</label>
+                    <select id="sortItems" onchange="sortItems()">
+                        <option value="text_asc">A-Ž</option>
+                        <option value="text_desc">Ž-A</option>
+                        <option value="priority_asc">Prioriteta ▲</option>
+                        <option value="priority_desc">Prioriteta ▼</option>
+                    </select>
+                </div>
+                
+                <div id="itemsContainer"></div>
+                <div class="item-input-group">
+                    <div class="form-group">
+                        <input type="text" id="newItem" placeholder="Vnesi nov element" onkeypress="addItemOnEnter(event)">
+                        <select id="itemPriority">
+                            <option value="1">★ Nizka</option>
+                            <option value="2">★★ Srednja</option>
+                            <option value="3">★★★ Visoka</option>
+                        </select>
+                    </div>
+                    <button class="primary-btn" onclick="addItem()">
+                        <i class="fas fa-plus"></i> Dodaj
+                    </button>
+                </div>
+            </div>
+
+            <div class="fullscreen-mode">
+                <div class="fullscreen-header">
+                    <h2 id="fullscreenListName"></h2>
+                </div>
+                <div id="fullscreenItemsContainer"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="primary-btn danger" onclick="closeModal()">
+                    <i class="fas fa-times"></i> Zapri
+                </button>
+                <button class="primary-btn success" onclick="saveAllData()">
+                    <i class="fas fa-save"></i> Shrani
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        function shareList() {
+            if (!currentListId) return;
+            const list = lists.find(l => l.id === currentListId);
+            if (!list) return;
+            
+            const data = {
+                n: list.name,
+                c: list.category,
+                p: list.priority,
+                t: list.titleColor,
+                i: list.items.map(i => [i.text, i.priority, i.completed?1:0])
+            };
+            
+            const encoded = btoa(JSON.stringify(data)).replace(/=/g,'');
+            const shareUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
+            
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert("Povezava za deljenje je kopirana v odložišče!\n\n" + shareUrl);
+            }).catch(() => {
+                const tempInput = document.createElement('input');
+                document.body.appendChild(tempInput);
+                tempInput.value = shareUrl;
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                alert("Povezava za deljenje je kopirana v odložišče!\n\n" + shareUrl);
+            });
+        }
+
+        function checkForSharedList() {
+            const params = new URLSearchParams(window.location.search);
+            const sharedData = params.get('s');
+            
+            if (sharedData) {
+                try {
+                    const data = JSON.parse(atob(sharedData));
+                    const list = {
+                        id: Date.now(),
+                        name: data.n,
+                        category: data.c,
+                        priority: data.p,
+                        titleColor: data.t,
+                        items: data.i.map(item => ({
+                            id: Date.now(),
+                            text: item[0],
+                            priority: item[1],
+                            completed: item[2] === 1
+                        })),
+                        createdAt: new Date()
+                    };
+                    
+                    lists.push(list);
+                    saveAllData();
+                    
+                    setTimeout(() => {
+                        openList(list.id);
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }, 300);
+                } catch (e) {
+                    console.error("Napaka pri branju deljenega seznama", e);
+                }
+            }
+        }
+        
+        function init() {
+            saveCategories();
+            renderCategories();
+            populateCategoryDropdowns();
+            checkMobileView();
+            window.jsPDF = window.jspdf.jsPDF;
+            document.getElementById('listName').addEventListener('input', validateListName);
+            checkForSharedList();
+        }
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
